@@ -1,4 +1,4 @@
-name: Test SSH Connection
+name: Test SSH
 
 on: [push]
 
@@ -6,15 +6,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - name: Test SSH connection
-      uses: appleboy/ssh-action@v1
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
       with:
-        host: course.prafdin.ru
-        username: vboxuser
-        port: 2425
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          echo "✅ SSH connection successful!"
-          echo "User: $(whoami)"
-          echo "Directory: $(pwd)"
-          ls -la
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+    
+    - name: Test connection
+      run: |
+        ssh -o StrictHostKeyChecking=no -p 2425 vboxuser@course.prafdin.ru 'echo "✅ SSH connection successful!"'
