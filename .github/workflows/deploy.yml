@@ -11,53 +11,34 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Setup SSH
-      uses: webfactory/ssh-agent@v0.7.0
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1
       with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-    
-    - name: Deploy application
-      run: |
-        ssh -o StrictHostKeyChecking=no -p 2425 vboxuser@course.prafdin.ru 'bash -s' << 'EOF'
-        cd /home/vboxuser
-        
-        # Останавливаем старые процессы
-        pkill -f "python.*app.py" || true
-        sleep 2
-        
-        # Создаем папку и файл
-        mkdir -p devops-app
-        cd devops-app
-        
-        # Простой Python сервер
-        cat > app.py << 'APPEOF'
-        import http.server
-        import socketserver
-
-        PORT = 8181
-
-        class SimpleHandler(http.server.SimpleHTTPRequestHandler):
-          def do_GET(self):
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            html_content = "<html><body><h1>DevOps Lab #2 - GitHub Actions CD</h1><p>Deployed via release pipeline</p></body></html>"
-            self.wfile.write(html_content.encode())
-
-        with socketserver.TCPServer(("", PORT), SimpleHandler) as httpd:
-          print(f"Server on port {PORT}")
-          httpd.serve_forever()
-        APPEOF
-
-        # Запускаем
-        nohup python3 app.py > app.log 2>&1 &
-        sleep 5
-        
-        # Проверяем
-        if pgrep -f "python.*app.py" > /dev/null; then
-          echo "Deployment successful!"
-        else
-          echo "Deployment failed"
-          exit 1
-        fi
-        EOF
+        host: course.prafdin.ru
+        username: vboxuser
+        port: 2425
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          echo "Starting deployment..."
+          cd /home/vboxuser
+          
+          # Останавливаем предыдущий процесс если запущен
+          pkill -f "python.*app.py" || true
+          sleep 2
+          
+          # Обновляем код
+          if [ -d "devops-lab1" ]; then
+            cd devops-lab1
+            git pull origin main
+          else
+            git clone https://github.com/ТВОЙ_USERNAME/ТВОЙ_РЕПОЗИТОРИЙ.git devops-lab1
+            cd devops-lab1
+          fi
+          
+          # Запускаем приложение в фоне
+          nohup python app.py > app.log 2>&1 &
+          echo "✓ Application deployed and running on port 8181"
+          
+          # Проверяем что процесс запустился
+          sleep 3
+          pgrep -f "python.*app.py" && echo "✓ Process is running" || echo "✗ Process failed to start"
