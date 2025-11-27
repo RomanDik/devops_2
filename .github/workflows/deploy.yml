@@ -19,26 +19,65 @@ jobs:
         port: 2425
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          echo "Starting deployment..."
+          echo "=== Starting deployment ==="
+          
+          # Переходим в домашнюю директорию
           cd /home/vboxuser
           
-          # Останавливаем предыдущий процесс если запущен
-          pkill -f "python.*app.py" || true
-          sleep 2
+          # Останавливаем предыдущие процессы Python на порту 8181
+          echo "Stopping previous processes..."
+          sudo pkill -f "python.*app.py" || true
+          sleep 3
           
-          # Обновляем код
+          # Проверяем, остались ли процессы
+          if pgrep -f "python.*app.py" > /dev/null; then
+            echo "Force killing remaining processes..."
+            sudo pkill -9 -f "python.*app.py" || true
+            sleep 2
+          fi
+          
+          # Клонируем или обновляем репозиторий
+          echo "Updating code..."
           if [ -d "devops-lab1" ]; then
             cd devops-lab1
-            git pull origin main
+            git fetch origin
+            git reset --hard origin/main
           else
             git clone https://github.com/RomanDik/devops_2.git devops-lab1
             cd devops-lab1
           fi
           
+          # Проверяем что файл app.py существует
+          ls -la
+          echo "Current directory: $(pwd)"
+          
           # Запускаем приложение в фоне
-          nohup python app.py > app.log 2>&1 &
-          echo "✓ Application deployed and running on port 8181"
+          echo "Starting application..."
+          nohup python3 app.py > app.log 2>&1 &
+          
+          # Даем время на запуск
+          sleep 5
           
           # Проверяем что процесс запустился
-          sleep 3
-          pgrep -f "python.*app.py" && echo "✓ Process is running" || echo "✗ Process failed to start"
+          echo "Checking if process is running..."
+          if pgrep -f "python.*app.py" > /dev/null; then
+            echo "✓ Application process is running"
+          else
+            echo "✗ Application failed to start"
+            echo "=== App log content ==="
+            cat app.log || true
+            exit 1
+          fi
+          
+          # Проверяем что приложение отвечает на порту 8181
+          echo "Testing application on port 8181..."
+          if curl -f http://localhost:8181 > /dev/null 2>&1; then
+            echo "✓ Application is responding on port 8181"
+          else
+            echo "✗ Application not responding on port 8181"
+            echo "=== Checking netstat ==="
+            netstat -tlnp | grep :8181 || true
+            exit 1
+          fi
+          
+          echo "=== Deployment completed successfully ==="
