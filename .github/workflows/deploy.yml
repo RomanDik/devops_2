@@ -18,7 +18,6 @@ jobs:
     
     - name: Copy application files via SCP
       run: |
-        # Создаем папку на сервере и копируем файлы
         ssh -o StrictHostKeyChecking=no -p 2425 vboxuser@course.prafdin.ru 'mkdir -p /home/vboxuser/devops-app'
         scp -o StrictHostKeyChecking=no -P 2425 -r ./* vboxuser@course.prafdin.ru:/home/vboxuser/devops-app/
     
@@ -27,8 +26,23 @@ jobs:
         ssh -o StrictHostKeyChecking=no -p 2425 vboxuser@course.prafdin.ru 'bash -s' << 'EOF'
         cd /home/vboxuser/devops-app
         
-        # Устанавливаем время деплоя как переменную окружения в сервисе
         DEPLOY_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+        
+        # Останавливаем сервис и ждем освобождения порта
+        echo "Stopping existing service..."
+        sudo systemctl stop devops-app.service || true
+        
+        # Убиваем все процессы на порту 8181
+        echo "Killing any processes on port 8181..."
+        sudo pkill -f "python.*app.py" || true
+        sleep 3
+        
+        # Проверяем что порт свободен
+        if sudo lsof -i :8181 > /dev/null 2>&1; then
+          echo "Port 8181 is still in use, forcing cleanup..."
+          sudo fuser -k 8181/tcp || true
+          sleep 2
+        fi
         
         # Создаем systemd сервис
         sudo tee /etc/systemd/system/devops-app.service > /dev/null << 'SERVICEEOF'
@@ -54,14 +68,16 @@ jobs:
         # Настраиваем и запускаем сервис
         sudo systemctl daemon-reload
         sudo systemctl enable devops-app.service
-        sudo systemctl restart devops-app.service
+        sudo systemctl start devops-app.service
+        
+        # Даем время на запуск
+        sleep 5
         
         # Проверяем статус
         echo "=== Service status ==="
         sudo systemctl status devops-app.service --no-pager
         
         # Проверяем что приложение работает
-        sleep 5
         if curl -f http://localhost:8181 > /dev/null 2>&1; then
           echo "Application deployed and running via systemd service!"
           echo "Deployed at: $DEPLOY_TIME"
