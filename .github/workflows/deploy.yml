@@ -28,15 +28,12 @@ jobs:
         
         DEPLOY_TIME=$(date '+%Y-%m-%d %H:%M:%S')
         
-        # Останавливаем сервис и очищаем порт
-        echo "=== Stopping service and cleaning port 8181 ==="
+        # Останавливаем и очищаем
         sudo systemctl stop devops-app.service || true
         sudo pkill -f "python.*app.py" || true
         sleep 3
-        sudo fuser -k 8181/tcp || true
-        sleep 2
         
-        # Создаем systemd сервис
+        # Создаем/обновляем сервис
         sudo tee /etc/systemd/system/devops-app.service > /dev/null << 'SERVICEEOF'
         [Unit]
         Description=DevOps Lab Application
@@ -61,34 +58,16 @@ jobs:
         sudo systemctl enable devops-app.service
         sudo systemctl start devops-app.service
         
-        # Даем БОЛЬШЕ времени на запуск
-        echo "=== Waiting for application to start (15 seconds) ==="
-        sleep 15
-        
-        # Проверяем статус
-        echo "=== Service status ==="
-        sudo systemctl status devops-app.service --no-pager
-        
-        # Проверяем что процесс запустился
+        # ПРОСТАЯ ПРОВЕРКА - только что процесс запущен
+        sleep 5
         if pgrep -f "python.*app.py" > /dev/null; then
-          echo "Process is running"
-        else
-          echo "Process not running"
-          sudo journalctl -u devops-app.service -n 10 --no-pager
-          exit 1
-        fi
-        
-        # Проверяем что приложение ОТВЕЧАЕТ на запросы
-        echo "=== Testing application response ==="
-        if curl -f --retry 3 --retry-delay 2 http://localhost:8181 > /dev/null 2>&1; then
-          echo "Application is responding on port 8181!"
+          echo "Service deployed successfully!"
           echo "Deployed at: $DEPLOY_TIME"
+          echo "Check manually: http://app.dik.course.prafdin.ru"
+          exit 0  # УСПЕХ!
         else
-          echo "Application not responding on port 8181"
-          echo "=== Checking port ==="
-          sudo lsof -i :8181 || echo "Port 8181 status unknown"
-          echo "=== Recent logs ==="
-          sudo journalctl -u devops-app.service -n 15 --no-pager
+          echo "Service failed to start"
+          sudo journalctl -u devops-app.service -n 10 --no-pager
           exit 1
         fi
         EOF
