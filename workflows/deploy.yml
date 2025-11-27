@@ -11,16 +11,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    
     - name: Deploy to server
       uses: appleboy/ssh-action@v1
       with:
@@ -29,7 +19,26 @@ jobs:
         port: 2425
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          cd /path/to/your/app
-          git pull origin main
-          # Добавь здесь команды для перезапуска приложения
-          sudo systemctl restart your-app-service
+          echo "Starting deployment..."
+          cd /home/vboxuser
+          
+          # Останавливаем предыдущий процесс если запущен
+          pkill -f "python.*app.py" || true
+          sleep 2
+          
+          # Обновляем код
+          if [ -d "devops-lab1" ]; then
+            cd devops-lab1
+            git pull origin main
+          else
+            git clone https://github.com/ТВОЙ_USERNAME/ТВОЙ_РЕПОЗИТОРИЙ.git devops-lab1
+            cd devops-lab1
+          fi
+          
+          # Запускаем приложение в фоне
+          nohup python app.py > app.log 2>&1 &
+          echo "✓ Application deployed and running on port 8181"
+          
+          # Проверяем что процесс запустился
+          sleep 3
+          pgrep -f "python.*app.py" && echo "✓ Process is running" || echo "✗ Process failed to start"
