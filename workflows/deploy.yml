@@ -1,0 +1,35 @@
+name: CD
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1
+      with:
+        host: course.prafdin.ru
+        username: vboxuser
+        port: 2425
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd /path/to/your/app
+          git pull origin main
+          # Добавь здесь команды для перезапуска приложения
+          sudo systemctl restart your-app-service
