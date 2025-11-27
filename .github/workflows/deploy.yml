@@ -18,72 +18,46 @@ jobs:
     
     - name: Deploy application
       run: |
-        ssh -o StrictHostKeyChecking=no -p 2425 vboxuser@course.prafdin.ru << 'EOF'
-          echo "=== Starting deployment ==="
-          cd /home/vboxuser
-          
-          # Останавливаем предыдущие процессы
-          echo "Stopping previous processes..."
-          pkill -f "python.*app.py" || true
-          sleep 2
-          
-          # Создаем папку для приложения
-          mkdir -p devops-app
-          cd devops-app
-          
-          # Создаем app.py
-          cat > app.py << 'APPEOF'
-import http.server
-import socketserver
-
-PORT = 8181
-
-class SimpleHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
+        ssh -o StrictHostKeyChecking=no -p 2425 vboxuser@course.prafdin.ru 'bash -s' << 'EOF'
+        cd /home/vboxuser
         
-        html_content = '''
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>DevOps Lab #2</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 40px; }
-                .container { max-width: 800px; margin: 0 auto; }
-                .success { color: green; font-weight: bold; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>DevOps Laboratory Work #2</h1>
-                <p><strong>Student:</strong> dik</p>
-                <p class="success">Successfully deployed via GitHub Actions CD Pipeline!</p>
-                <p>This page updates automatically when you create a release.</p>
-                <p><strong>App URL:</strong> http://app.dik.course.prafdin.ru</p>
-            </div>
-        </body>
-        </html>
-        '''
+        # Останавливаем старые процессы
+        pkill -f "python.*app.py" || true
+        sleep 2
         
-        self.wfile.write(html_content.encode())
+        # Создаем папку и файл
+        mkdir -p devops-app
+        cd devops-app
+        
+        # Простой Python сервер
+        cat > app.py << 'APPEOF'
+        import http.server
+        import socketserver
 
-with socketserver.TCPServer(("", PORT), SimpleHandler) as httpd:
-    print(f"Server running on port {PORT}")
-    httpd.serve_forever()
-APPEOF
+        PORT = 8181
 
-          # Запускаем приложение
-          echo "Starting application..."
-          nohup python3 app.py > app.log 2>&1 &
-          sleep 5
-          
-          # Проверяем
-          if pgrep -f "python.*app.py" > /dev/null; then
-            echo "✅ Deployment successful!"
-          else
-            echo "❌ Deployment failed"
-            exit 1
-          fi
+        class SimpleHandler(http.server.SimpleHTTPRequestHandler):
+          def do_GET(self):
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            html_content = "<html><body><h1>DevOps Lab #2 - GitHub Actions CD</h1><p>Deployed via release pipeline</p></body></html>"
+            self.wfile.write(html_content.encode())
+
+        with socketserver.TCPServer(("", PORT), SimpleHandler) as httpd:
+          print(f"Server on port {PORT}")
+          httpd.serve_forever()
+        APPEOF
+
+        # Запускаем
+        nohup python3 app.py > app.log 2>&1 &
+        sleep 5
+        
+        # Проверяем
+        if pgrep -f "python.*app.py" > /dev/null; then
+          echo "Deployment successful!"
+        else
+          echo "Deployment failed"
+          exit 1
+        fi
         EOF
