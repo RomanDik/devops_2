@@ -28,21 +28,13 @@ jobs:
         
         DEPLOY_TIME=$(date '+%Y-%m-%d %H:%M:%S')
         
-        # Останавливаем сервис и ждем освобождения порта
-        echo "Stopping existing service..."
+        # Останавливаем сервис и очищаем порт
+        echo "=== Stopping service and cleaning port 8181 ==="
         sudo systemctl stop devops-app.service || true
-        
-        # Убиваем все процессы на порту 8181
-        echo "Killing any processes on port 8181..."
         sudo pkill -f "python.*app.py" || true
         sleep 3
-        
-        # Проверяем что порт свободен
-        if sudo lsof -i :8181 > /dev/null 2>&1; then
-          echo "Port 8181 is still in use, forcing cleanup..."
-          sudo fuser -k 8181/tcp || true
-          sleep 2
-        fi
+        sudo fuser -k 8181/tcp || true
+        sleep 2
         
         # Создаем systemd сервис
         sudo tee /etc/systemd/system/devops-app.service > /dev/null << 'SERVICEEOF'
@@ -56,7 +48,7 @@ jobs:
         WorkingDirectory=/home/vboxuser/devops-app
         Environment=DEPLOY_TIME=$DEPLOY_TIME
         ExecStart=/usr/bin/python3 /home/vboxuser/devops-app/app.py
-        Restart=always
+        Restart=on-failure
         RestartSec=5
         StandardOutput=journal
         StandardError=journal
@@ -65,24 +57,37 @@ jobs:
         WantedBy=multi-user.target
         SERVICEEOF
 
-        # Настраиваем и запускаем сервис
         sudo systemctl daemon-reload
         sudo systemctl enable devops-app.service
         sudo systemctl start devops-app.service
         
-        # Даем время на запуск
-        sleep 5
+        # Даем БОЛЬШЕ времени на запуск
+        echo "=== Waiting for application to start (15 seconds) ==="
+        sleep 15
         
         # Проверяем статус
         echo "=== Service status ==="
         sudo systemctl status devops-app.service --no-pager
         
-        # Проверяем что приложение работает
-        if curl -f http://localhost:8181 > /dev/null 2>&1; then
-          echo "Application deployed and running via systemd service!"
+        # Проверяем что процесс запустился
+        if pgrep -f "python.*app.py" > /dev/null; then
+          echo "Process is running"
+        else
+          echo "Process not running"
+          sudo journalctl -u devops-app.service -n 10 --no-pager
+          exit 1
+        fi
+        
+        # Проверяем что приложение ОТВЕЧАЕТ на запросы
+        echo "=== Testing application response ==="
+        if curl -f --retry 3 --retry-delay 2 http://localhost:8181 > /dev/null 2>&1; then
+          echo "Application is responding on port 8181!"
           echo "Deployed at: $DEPLOY_TIME"
         else
-          echo "Application failed to start"
+          echo "Application not responding on port 8181"
+          echo "=== Checking port ==="
+          sudo lsof -i :8181 || echo "Port 8181 status unknown"
+          echo "=== Recent logs ==="
           sudo journalctl -u devops-app.service -n 15 --no-pager
           exit 1
         fi
