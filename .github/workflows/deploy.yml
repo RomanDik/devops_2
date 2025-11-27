@@ -16,48 +16,58 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
     
-    - name: Deploy application
+    - name: Copy application files via SCP
+      run: |
+        # Создаем папку на сервере и копируем файлы
+        ssh -o StrictHostKeyChecking=no -p 2425 vboxuser@course.prafdin.ru 'mkdir -p /home/vboxuser/devops-app'
+        scp -o StrictHostKeyChecking=no -P 2425 -r ./* vboxuser@course.prafdin.ru:/home/vboxuser/devops-app/
+    
+    - name: Deploy and start service
       run: |
         ssh -o StrictHostKeyChecking=no -p 2425 vboxuser@course.prafdin.ru 'bash -s' << 'EOF'
-        cd /home/vboxuser
+        cd /home/vboxuser/devops-app
         
-        # Останавливаем старые процессы
-        pkill -f "python.*app.py" || true
-        sleep 2
+        # Устанавливаем время деплоя как переменную окружения в сервисе
+        DEPLOY_TIME=$(date '+%Y-%m-%d %H:%M:%S')
         
-        # Создаем папку и файл
-        mkdir -p devops-app
-        cd devops-app
+        # Создаем systemd сервис
+        sudo tee /etc/systemd/system/devops-app.service > /dev/null << 'SERVICEEOF'
+        [Unit]
+        Description=DevOps Lab Application
+        After=network.target
+
+        [Service]
+        Type=simple
+        User=vboxuser
+        WorkingDirectory=/home/vboxuser/devops-app
+        Environment=DEPLOY_TIME=$DEPLOY_TIME
+        ExecStart=/usr/bin/python3 /home/vboxuser/devops-app/app.py
+        Restart=always
+        RestartSec=5
+        StandardOutput=journal
+        StandardError=journal
+
+        [Install]
+        WantedBy=multi-user.target
+        SERVICEEOF
+
+        # Настраиваем и запускаем сервис
+        sudo systemctl daemon-reload
+        sudo systemctl enable devops-app.service
+        sudo systemctl restart devops-app.service
         
-        # Создаем app.py с правильными отступами
-        cat > app.py << 'APPEOF'
-        import http.server
-        import socketserver
-
-        PORT = 8181
-
-        class SimpleHandler(http.server.SimpleHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html')
-                self.end_headers()
-                html_content = "<html><body><h1>DevOps Lab #2 - GitHub Actions CD</h1><p>Deployed via release pipeline</p></body></html>"
-                self.wfile.write(html_content.encode())
-
-        with socketserver.TCPServer(("", PORT), SimpleHandler) as httpd:
-            print(f"Server on port {PORT}")
-            httpd.serve_forever()
-        APPEOF
-
-        # Запускаем
-        nohup python3 app.py > app.log 2>&1 &
+        # Проверяем статус
+        echo "=== Service status ==="
+        sudo systemctl status devops-app.service --no-pager
+        
+        # Проверяем что приложение работает
         sleep 5
-        
-        # Проверяем
-        if pgrep -f "python.*app.py" > /dev/null; then
-          echo "Deployment successful!"
+        if curl -f http://localhost:8181 > /dev/null 2>&1; then
+          echo "Application deployed and running via systemd service!"
+          echo "Deployed at: $DEPLOY_TIME"
         else
-          echo "Deployment failed"
+          echo "Application failed to start"
+          sudo journalctl -u devops-app.service -n 15 --no-pager
           exit 1
         fi
         EOF
