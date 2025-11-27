@@ -1,17 +1,12 @@
-name: CD
+name: Test SSH Connection
 
-on:
-  release:
-    types: [published]
+on: [push]
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Deploy to server
+    - name: Test SSH connection
       uses: appleboy/ssh-action@v1
       with:
         host: course.prafdin.ru
@@ -19,73 +14,7 @@ jobs:
         port: 2425
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          echo "=== Starting deployment ==="
-          cd /home/vboxuser
-          pwd
+          echo "✅ SSH connection successful!"
+          echo "User: $(whoami)"
+          echo "Directory: $(pwd)"
           ls -la
-          
-          # Останавливаем предыдущие процессы Python на порту 8181
-          echo "Stopping previous processes..."
-          pkill -f "python.*app.py" || true
-          sleep 2
-          
-          # Создаем папку для приложения если её нет
-          if [ ! -d "devops-app" ]; then
-            echo "Creating devops-app directory..."
-            mkdir -p devops-app
-          fi
-          
-          cd devops-app
-          echo "Current directory: $(pwd)"
-          
-          # Создаем простой app.py для теста
-          echo "Creating simple app.py..."
-          cat > app.py << 'ENDOFFILE'
-import http.server
-import socketserver
-
-PORT = 8181
-
-class SimpleHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-        self.wfile.write(b'<html><body><h1>DevOps Lab #2 - GitHub Actions Success!</h1><p>Deployed via CD pipeline</p></body></html>')
-
-with socketserver.TCPServer(("", PORT), SimpleHandler) as httpd:
-    print(f"Server running on port {PORT}")
-    httpd.serve_forever()
-ENDOFFILE
-
-          # Проверяем что файл создался
-          ls -la
-          echo "File created successfully"
-          
-          # Запускаем приложение в фоне
-          echo "Starting application..."
-          nohup python3 app.py > app.log 2>&1 &
-          
-          # Даем время на запуск
-          sleep 5
-          
-          # Проверяем что процесс запустился
-          echo "Checking if process is running..."
-          if pgrep -f "python.*app.py" > /dev/null; then
-            echo "✓ Application process is running"
-          else
-            echo "✗ Application failed to start"
-            cat app.log
-            exit 1
-          fi
-          
-          # Проверяем что приложение отвечает
-          echo "Testing application..."
-          if curl -f http://localhost:8181 > /dev/null 2>&1; then
-            echo "✓ Application is responding"
-          else
-            echo "✗ Application not responding"
-            exit 1
-          fi
-          
-          echo "=== Deployment completed successfully ==="
