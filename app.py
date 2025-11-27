@@ -24,7 +24,7 @@ class SimpleHandler(http.server.SimpleHTTPRequestHandler):
             <div class="container">
                 <h1>DevOps Laboratory Work #1</h1>
                 <p><strong>Student:</strong> dik</p>
-                <p class="success">Successfully deployed via GitHub Webhooks! final try again 4!</p>
+                <p class="success">Successfully deployed via GitHub Webhooks! final try again 3!</p>
                 <p>This page updates automatically when you push to GitHub.</p>
                 <p><strong>Webhook URL:</strong> http://webhook.dik.course.prafdin.ru</p>
                 <p><strong>App URL:</strong> http://app.dik.course.prafdin.ru</p>
