@@ -32,7 +32,7 @@ class SimpleHandler(http.server.SimpleHTTPRequestHandler):
         </head>
         <body>
             <div class="container">
-                <h1>DevOps Laboratory Work #2 21332423543465475453534</h1>
+                <h1>DevOps Laboratory Work #2 22801089089</h1>
                 
                 <div class="info">
                     <p><strongStudent:</strong> {student_name}</p>
