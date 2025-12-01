@@ -27,7 +27,7 @@ jobs:
         docker rm devops-app || true
         
         # Скачиваем новый образ
-        docker pull ghcr.io/${{ github.repository }}:latest
+        docker pull ghcr.io/romandik/devops_2:latest
         
         # Запускаем новый контейнер
         docker run -d \
@@ -35,13 +35,13 @@ jobs:
           --restart always \
           -p 8181:8181 \
           -e DEPLOY_TIME="$(date '+%Y-%m-%d %H:%M:%S')" \
-          ghcr.io/${{ github.repository }}:latest
+          ghcr.io/romandik/devops_2:latest
         
         # Проверяем, что контейнер запустился
         sleep 5
         if docker ps | grep -q devops-app; then
           echo "Container deployed successfully!"
-          echo "Image: ghcr.io/${{ github.repository }}:latest"
+          echo "Image: ghcr.io/romandik/devops_2:latest"
           echo "URL: http://app.dik.course.prafdin.ru:8181"
         else
           echo "Container failed to start"
