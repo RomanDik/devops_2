@@ -25,7 +25,6 @@ jobs:
         import socketserver
         print('✓ All imports work correctly')
         
-        # Проверяем, что порт доступен
         PORT = 8181
         print(f'✓ Server would start on port {PORT}')
         "
@@ -34,3 +33,21 @@ jobs:
       run: |
         python -m py_compile app.py
         echo "✓ Syntax is valid"
+    
+    # Проверка Dockerfile с hadolint (опционально)
+    - name: Lint Dockerfile
+      continue-on-error: true  # не завершать пайплайн при ошибках
+      run: |
+        docker run --rm -i hadolint/hadolint < Dockerfile
+    
+    # Сборка Docker образа
+    - name: Build Docker image
+      run: |
+        docker build -t ghcr.io/${{ github.repository }}:latest .
+    
+    # Публикация в GitHub Container Registry
+    - name: Push Docker image
+      if: github.event_name == 'push'
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        docker push ghcr.io/${{ github.repository }}:latest
