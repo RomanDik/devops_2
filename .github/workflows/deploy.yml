@@ -16,58 +16,36 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
     
-    - name: Copy application files via SCP
-      run: |
-        ssh -o StrictHostKeyChecking=no -p 2425 vboxuser@course.prafdin.ru 'mkdir -p /home/vboxuser/devops-app'
-        scp -o StrictHostKeyChecking=no -P 2425 -r ./* vboxuser@course.prafdin.ru:/home/vboxuser/devops-app/
-    
-    - name: Deploy and start service
+    - name: Deploy Docker container
       run: |
         ssh -o StrictHostKeyChecking=no -p 2425 vboxuser@course.prafdin.ru 'bash -s' << 'EOF'
-        cd /home/vboxuser/devops-app
+        # Логинимся в GHCR
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
         
-        DEPLOY_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+        # Останавливаем старый контейнер
+        docker stop devops-app || true
+        docker rm devops-app || true
         
-        # Останавливаем и очищаем
-        sudo systemctl stop devops-app.service || true
-        sudo pkill -f "python.*app.py" || true
-        sleep 3
+        # Скачиваем новый образ
+        docker pull ghcr.io/${{ github.repository }}:latest
         
-        # Создаем/обновляем сервис
-        sudo tee /etc/systemd/system/devops-app.service > /dev/null << 'SERVICEEOF'
-        [Unit]
-        Description=DevOps Lab Application
-        After=network.target
-
-        [Service]
-        Type=simple
-        User=vboxuser
-        WorkingDirectory=/home/vboxuser/devops-app
-        Environment=DEPLOY_TIME=$DEPLOY_TIME
-        ExecStart=/usr/bin/python3 /home/vboxuser/devops-app/app.py
-        Restart=on-failure
-        RestartSec=5
-        StandardOutput=journal
-        StandardError=journal
-
-        [Install]
-        WantedBy=multi-user.target
-        SERVICEEOF
-
-        sudo systemctl daemon-reload
-        sudo systemctl enable devops-app.service
-        sudo systemctl start devops-app.service
+        # Запускаем новый контейнер
+        docker run -d \
+          --name devops-app \
+          --restart always \
+          -p 8181:8181 \
+          -e DEPLOY_TIME="$(date '+%Y-%m-%d %H:%M:%S')" \
+          ghcr.io/${{ github.repository }}:latest
         
-        # ПРОСТАЯ ПРОВЕРКА - только что процесс запущен
+        # Проверяем, что контейнер запустился
         sleep 5
-        if pgrep -f "python.*app.py" > /dev/null; then
-          echo "Service deployed successfully!"
-          echo "Deployed at: $DEPLOY_TIME"
-          echo "Check manually: http://app.dik.course.prafdin.ru"
-          exit 0  # УСПЕХ!
+        if docker ps | grep -q devops-app; then
+          echo "Container deployed successfully!"
+          echo "Image: ghcr.io/${{ github.repository }}:latest"
+          echo "URL: http://app.dik.course.prafdin.ru:8181"
         else
-          echo "Service failed to start"
-          sudo journalctl -u devops-app.service -n 10 --no-pager
+          echo "Container failed to start"
+          docker logs devops-app
           exit 1
         fi
         EOF
