@@ -4,7 +4,6 @@ FROM python:3.9-slim
 # Рабочую директорию
 WORKDIR /app
 
-# requirements.txt (для кэширования слоев)
 COPY requirements.txt .
 
 # Устанавливаем зависимости
